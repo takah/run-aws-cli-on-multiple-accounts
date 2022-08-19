@@ -1,0 +1,38 @@
+#!/bin/sh
+
+while getopts r:c:j:R: option
+do
+  case "${option}" in
+    r) ROLE=${OPTARG};;
+    c) CMD=${OPTARG};;
+    j) JQ=${OPTARG};;
+    R) REGION=${OPTARG};;
+  esac
+done
+
+if [ -z "$ROLE" -o -z "$CMD" -o -z "$JQ" ]; then
+  echo "Usage: $0 -r ROLE_NAME -c \"COMMAND\" -j \"JQ_COMMAND\" [-R REGION]"
+  echo "Example"
+  echo "$0 -r administrator -c \"lambda list-functions\" -j \".Functions[] | {name: .FunctionName, runtime: .Runtime}\" -R ap-northeast-1"
+  exit
+fi
+
+lines="$(grep arn:aws:iam:: ~/.aws/assume-role.conf | grep $ROLE)"
+if [ ! -z "$REGION" ]; then
+  REGION_ARG="--region $REGION"
+fi
+
+echo "$lines" | while IFS= read -r line
+do
+  echo "$line"
+  role=${line/* /}
+  res=$(aws sts assume-role --role-arn $role --role-session-name temporary)
+  akey=$(echo $res | jq -r .Credentials.AccessKeyId)
+  skey=$(echo $res | jq -r .Credentials.SecretAccessKey)
+  stoken=$(echo $res | jq -r .Credentials.SessionToken)
+  json=$(AWS_ACCESS_KEY_ID=$akey AWS_SECRET_ACCESS_KEY=$skey AWS_SESSION_TOKEN=$stoken aws $CMD $REGION_ARG)
+  filtered=$(jq "$JQ" <<< "$json")
+  if [ ! -z "$filtered" ]; then
+    jq -rs '(.[0]|keys_unsorted),map([.[]])[]|@tsv' <<< "$filtered"
+  fi
+done
