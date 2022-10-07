@@ -31,8 +31,6 @@ do
   skey=$(echo $res | jq -r .Credentials.SecretAccessKey)
   stoken=$(echo $res | jq -r .Credentials.SessionToken)
   json=$(AWS_ACCESS_KEY_ID=$akey AWS_SECRET_ACCESS_KEY=$skey AWS_SESSION_TOKEN=$stoken aws $CMD $REGION_ARG)
-  filtered=$(jq "$JQ" <<< "$json")
-  if [ ! -z "$filtered" ]; then
-    jq -rs '(.[0]|keys_unsorted),map([.[]])[]|@tsv' <<< "$filtered"
-  fi
+  jq -r "$JQ" <<< "$json"
+  echo
 done
